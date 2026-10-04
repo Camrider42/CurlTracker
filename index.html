@@ -62,14 +62,16 @@
     .empty-msg { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 16px 0; }
 
     /* Scanner Modal */
-    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200; justify-content: center; align-items: center; padding: 16px; }
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200; justify-content: center; align-items: center; padding: 16px; }
     .modal-content { background: var(--card); width: 100%; max-width: 420px; border-radius: 16px; padding: 20px; overflow: hidden; position: relative; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
     .modal-header h3 { font-size: 1rem; color: var(--primary); }
     .modal-close { background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; }
-    #scanner-viewfinder { width: 100%; min-height: 240px; border-radius: 12px; overflow: hidden; background: #000; position: relative; }
+    #scanner-viewfinder { width: 100%; min-height: 250px; border-radius: 12px; overflow: hidden; background: #222; }
+    #scanner-viewfinder video { width: 100% !important; height: auto !important; border-radius: 12px; object-fit: cover; }
     .scanner-tip { text-align: center; font-size: 0.78rem; color: var(--text-muted); margin-top: 10px; }
-    .manual-entry-link { display: block; text-align: center; margin-top: 10px; font-size: 0.8rem; color: var(--accent); text-decoration: underline; cursor: pointer; }
+    .manual-entry-link { display: block; text-align: center; margin-top: 12px; font-size: 0.8rem; color: var(--accent); text-decoration: underline; cursor: pointer; }
+    .btn-snap-fallback { width: 100%; background: var(--light-accent); color: var(--primary); border: 1px dashed var(--accent); padding: 10px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -149,22 +151,29 @@
   <div id="scanner-modal" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 id="modal-title">Scan Product Barcode</h3>
+        <h3 id="modal-title">Scan Barcode</h3>
         <button class="modal-close" onclick="closeScanner()">&times;</button>
       </div>
 
       <!-- LIVE CAMERA SCANNER -->
       <div id="scanner-camera-box">
         <div id="scanner-viewfinder"></div>
-        <p class="scanner-tip">Point your Pixel camera directly at the barcode</p>
-        <span class="manual-entry-link" onclick="showProductForm('')">Can't scan? Enter manually</span>
+        <p class="scanner-tip">Center barcode inside camera frame</p>
+
+        <!-- FALLBACK TO STILL PHOTO SCAN -->
+        <input type="file" id="barcode-photo-fallback" accept="image/*" capture="environment" onchange="scanBarcodeFromPhoto(event)">
+        <button class="btn-snap-fallback" onclick="document.getElementById('barcode-photo-fallback').click()">
+          📸 Tap here if camera stays black to snap a picture
+        </button>
+
+        <span class="manual-entry-link" onclick="showProductForm('')">Enter product name manually</span>
       </div>
 
-      <!-- SCANNED PRODUCT FORM -->
+      <!-- PRODUCT ADD FORM -->
       <div id="scanner-form-box" style="display: none;">
         <p id="barcode-display" style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 10px;"></p>
         <label style="font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 4px;">Product Name</label>
-        <input type="text" id="new-prod-name" placeholder="Looking up product..." style="margin-bottom: 12px;">
+        <input type="text" id="new-prod-name" placeholder="Enter product name..." style="margin-bottom: 12px;">
 
         <label style="font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 4px;">Shelf Category</label>
         <select id="new-prod-cat" style="margin-bottom: 16px;">
@@ -183,7 +192,6 @@
       navigator.serviceWorker.register('sw.js');
     }
 
-    // Default Pre-loaded Products
     const DEFAULT_PRODUCTS = {
       cleansers: [
         "Innersense Clarity Hairbath",
@@ -206,7 +214,6 @@
       ]
     };
 
-    // Custom Products in LocalStorage
     function getCustomProducts() {
       try {
         return JSON.parse(localStorage.getItem("curllog_custom_products") || "[]");
@@ -225,7 +232,6 @@
         const container = document.getElementById(`pills-${cat}`);
         container.innerHTML = "";
 
-        // Render Pre-loaded
         DEFAULT_PRODUCTS[cat].forEach(name => {
           const pill = document.createElement("div");
           pill.className = "pill";
@@ -234,7 +240,6 @@
           container.appendChild(pill);
         });
 
-        // Render User Scanned/Added
         custom.filter(p => p.category === cat).forEach(p => {
           const pill = document.createElement("div");
           pill.className = "pill custom";
@@ -252,60 +257,108 @@
       renderShelf();
     }
 
-    // --- Barcode Scanning Workflow ---
+    // --- Scanner Engine (UI-First & Crash-Proof) ---
     let html5Scanner = null;
+    let isScanningActive = false;
 
     function openScanner() {
-      document.getElementById("scanner-modal").style.display = "flex";
+      const modal = document.getElementById("scanner-modal");
+      modal.style.display = "flex";
       document.getElementById("scanner-camera-box").style.display = "block";
       document.getElementById("scanner-form-box").style.display = "none";
       document.getElementById("modal-title").innerText = "Scan Product Barcode";
+      isScanningActive = false;
 
-      html5Scanner = new Html5Qrcode("scanner-viewfinder", {
-        experimentalFeatures: { useBarCodeDetectorIfSupported: true } // Uses Pixel's hardware detector
-      });
+      stopScannerEngine();
 
-      const config = {
-        fps: 10,
-        qrbox: { width: 250, height: 140 },
-        aspectRatio: 1.333333
-      };
+      setTimeout(() => {
+        try {
+          html5Scanner = new Html5Qrcode("scanner-viewfinder");
 
-      html5Scanner.start(
-        { facingMode: "environment" },
-        config,
-        onBarcodeDetected,
-        () => {} // Frame scan in progress
-      ).catch(err => {
-        alert("Camera access was not granted or is unavailable: " + err);
-        showProductForm("");
-      });
+          const scanConfig = {
+            fps: 15,
+            qrbox: (viewfinderWidth, viewfinderHeight) => {
+              const edgeSize = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
+              return { width: edgeSize, height: Math.floor(edgeSize * 0.55) };
+            }
+          };
+
+          html5Scanner.start(
+            { facingMode: "environment" },
+            scanConfig,
+            onBarcodeDetected,
+            () => {}
+          ).catch(err => {
+            console.warn("Live camera start failed, fallback active:", err);
+          });
+        } catch (e) {
+          console.warn("Scanner initialization error:", e);
+        }
+      }, 250);
+    }
+
+    function scanBarcodeFromPhoto(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      if (!html5Scanner) {
+        html5Scanner = new Html5Qrcode("scanner-viewfinder");
+      }
+
+      html5Scanner.scanFile(file, true)
+        .then(barcodeText => onBarcodeDetected(barcodeText))
+        .catch(() => {
+          alert("Could not detect barcode from that photo. You can type the name in manually.");
+          showProductForm("");
+        });
     }
 
     async function onBarcodeDetected(barcodeText) {
-      if (navigator.vibrate) navigator.vibrate(80);
-      stopScannerEngine();
-      showProductForm(barcodeText);
+      if (isScanningActive) return;
+      isScanningActive = true;
 
-      // Automatic product database lookup via Open Beauty Facts
+      if (navigator.vibrate) {
+        try { navigator.vibrate(80); } catch(e){}
+      }
+
+      // Immediately switch UI to input form
+      document.getElementById("scanner-camera-box").style.display = "none";
+      document.getElementById("scanner-form-box").style.display = "block";
+      document.getElementById("modal-title").innerText = "Add New Product";
+      document.getElementById("barcode-display").innerText = `Barcode: ${barcodeText}`;
+      document.getElementById("new-prod-name").value = "";
+      document.getElementById("new-prod-name").placeholder = "Looking up product details...";
+
+      // Stop camera in background
+      stopScannerEngine();
+
+      // Database lookup with 3.5s timeout safeguard
       try {
-        const res = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${barcodeText}.json`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+        const res = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${barcodeText}.json`, { 
+          signal: controller.signal 
+        });
+        clearTimeout(timeoutId);
+        
         const data = await res.json();
         if (data.status === 1 && data.product) {
           const brand = data.product.brands ? `${data.product.brands} ` : "";
           const name = data.product.product_name || "";
           if (name) {
             document.getElementById("new-prod-name").value = `${brand}${name}`.trim();
-            return;
           }
         }
       } catch (e) {
-        console.warn("OpenBeautyFacts lookup bypass", e);
+        console.warn("Database lookup bypassed or timed out:", e);
+      } finally {
+        if (!document.getElementById("new-prod-name").value) {
+          document.getElementById("new-prod-name").placeholder = "Enter product name...";
+        }
+        document.getElementById("new-prod-name").focus();
+        isScanningActive = false;
       }
-
-      document.getElementById("new-prod-name").value = "";
-      document.getElementById("new-prod-name").placeholder = "Enter product name";
-      document.getElementById("new-prod-name").focus();
     }
 
     function showProductForm(barcode) {
@@ -314,16 +367,15 @@
       document.getElementById("scanner-form-box").style.display = "block";
       document.getElementById("modal-title").innerText = "Add New Product";
       document.getElementById("barcode-display").innerText = barcode ? `Barcode: ${barcode}` : "Manual Entry";
-      if (!barcode) {
-        document.getElementById("new-prod-name").value = "";
-        document.getElementById("new-prod-name").placeholder = "e.g. Curl Definition Jelly";
-      }
+      document.getElementById("new-prod-name").value = "";
+      document.getElementById("new-prod-name").placeholder = "e.g. Curl Definition Gel";
+      document.getElementById("new-prod-name").focus();
     }
 
     function confirmAddProduct() {
       const name = document.getElementById("new-prod-name").value.trim();
       const cat = document.getElementById("new-prod-cat").value;
-      if (!name || name === "Looking up product...") {
+      if (!name) {
         alert("Please enter a product name.");
         return;
       }
@@ -337,10 +389,13 @@
 
     function stopScannerEngine() {
       if (html5Scanner) {
-        html5Scanner.stop().then(() => {
-          html5Scanner.clear();
-          html5Scanner = null;
-        }).catch(() => { html5Scanner = null; });
+        const scannerRef = html5Scanner;
+        html5Scanner = null;
+        try {
+          scannerRef.stop().then(() => {
+            try { scannerRef.clear(); } catch(e){}
+          }).catch(() => {});
+        } catch(e) {}
       }
     }
 
@@ -349,7 +404,7 @@
       document.getElementById("scanner-modal").style.display = "none";
     }
 
-    // --- Routine & Storage Workflow ---
+    // --- Routine & IndexedDB Local Storage ---
     let db;
     const request = indexedDB.open("CurlTrackerDB", 1);
     request.onupgradeneeded = (e) => {

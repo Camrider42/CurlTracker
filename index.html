@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CurlLog AI</title>
+  <meta name="theme-color" content="#4A3E3D">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Scanner Library for Camera Barcode Detection -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #F9F7F5;
+      --card: #FFFFFF;
+      --primary: #4A3E3D;
+      --accent: #8E7364;
+      --light-accent: #EFE9E4;
+      --text: #2B2625;
+      --text-muted: #7A726D;
+      --border: #E5DFDA;
+      --danger: #B33A3A;
+      --success: #2E7D32;
+    }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; }
+    body { background-color: var(--bg); color: var(--text); padding-bottom: 90px; }
+    header { background: var(--primary); color: white; padding: 18px 20px; position: sticky; top: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.5px; }
+    .container { max-width: 500px; margin: 0 auto; padding: 16px; }
+    .card { background: var(--card); border-radius: 14px; padding: 18px; margin-bottom: 16px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+    .card-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .card h2 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--accent); }
+    .shelf-category { margin-bottom: 14px; }
+    .category-title { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; }
+    .product-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; background: var(--light-accent); color: var(--primary); border: 1px solid transparent; padding: 7px 12px; border-radius: 20px; font-size: 0.82rem; cursor: pointer; user-select: none; transition: all 0.15s ease; }
+    .pill:active { transform: scale(0.96); background: var(--accent); color: white; }
+    .pill.custom { border-color: var(--accent); }
+    .pill .delete-custom { color: var(--danger); font-weight: bold; margin-left: 2px; cursor: pointer; }
+    .btn-scan { background: var(--accent); color: white; border: none; padding: 7px 12px; border-radius: 8px; font-size: 0.78rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .routine-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+    .routine-item { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 0.88rem; }
+    .routine-item .step-num { font-weight: 700; color: var(--accent); margin-right: 8px; }
+    .remove-btn { color: var(--danger); background: none; border: none; font-size: 1.1rem; padding: 0 4px; cursor: pointer; }
+    .toggle-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .toggle-btn { background: var(--bg); border: 1px solid var(--border); padding: 10px; border-radius: 8px; text-align: center; font-size: 0.82rem; cursor: pointer; font-weight: 500; }
+    .toggle-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+    .photo-box { display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px dashed var(--border); border-radius: 10px; padding: 16px; cursor: pointer; position: relative; overflow: hidden; min-height: 140px; background: var(--bg); }
+    .photo-box img { width: 100%; height: auto; max-height: 250px; object-fit: cover; border-radius: 8px; display: none; }
+    .photo-placeholder { text-align: center; color: var(--text-muted); font-size: 0.82rem; }
+    input[type="file"] { display: none; }
+    input[type="text"], select, textarea { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 0.85rem; background: var(--bg); color: var(--text); }
+    textarea { resize: none; margin-top: 8px; height: 60px; }
+    .btn-primary { width: 100%; background: var(--primary); color: white; border: none; padding: 14px; border-radius: 10px; font-size: 0.95rem; font-weight: 600; cursor: pointer; margin-top: 6px; }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-export { background: var(--accent); width: 100%; color: white; border: none; padding: 12px; border-radius: 10px; font-size: 0.88rem; font-weight: 600; cursor: pointer; margin-top: 8px; }
+    .log-card { margin-top: 14px; border-left: 4px solid var(--accent); }
+    .log-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
+    .log-img { width: 100%; border-radius: 8px; margin-top: 10px; }
+    .empty-msg { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 16px 0; }
+
+    /* Scanner Modal */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200; justify-content: center; align-items: center; padding: 16px; }
+    .modal-content { background: var(--card); width: 100%; max-width: 420px; border-radius: 16px; padding: 20px; overflow: hidden; position: relative; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .modal-header h3 { font-size: 1rem; color: var(--primary); }
+    .modal-close { background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; }
+    #scanner-viewfinder { width: 100%; min-height: 240px; border-radius: 12px; overflow: hidden; background: #000; position: relative; }
+    .scanner-tip { text-align: center; font-size: 0.78rem; color: var(--text-muted); margin-top: 10px; }
+    .manual-entry-link { display: block; text-align: center; margin-top: 10px; font-size: 0.8rem; color: var(--accent); text-decoration: underline; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>CurlLog AI</h1>
+    <span id="day-counter" style="font-size: 0.82rem; opacity: 0.85;">Day 0 / 30</span>
+  </header>
+
+  <div class="container">
+    <!-- 1. PRODUCT STASH -->
+    <div class="card">
+      <div class="card-header-row">
+        <h2>1. Tap Products In Order</h2>
+        <button class="btn-scan" onclick="openScanner()">📷 Scan Barcode</button>
+      </div>
+      
+      <div class="shelf-category">
+        <div class="category-title">Cleansers & Conditioners</div>
+        <div class="product-pills" id="pills-cleansers"></div>
+      </div>
+
+      <div class="shelf-category">
+        <div class="category-title">Primers & Treatments</div>
+        <div class="product-pills" id="pills-primers"></div>
+      </div>
+
+      <div class="shelf-category">
+        <div class="category-title">Stylers & Hold</div>
+        <div class="product-pills" id="pills-stylers"></div>
+      </div>
+    </div>
+
+    <!-- 2. ACTIVE ROUTINE -->
+    <div class="card">
+      <h2>2. Today's Application Sequence</h2>
+      <ul id="routine-list" class="routine-list">
+        <li class="empty-msg">Tap products from above to set your sequence</li>
+      </ul>
+
+      <div class="toggle-group">
+        <div class="toggle-btn active" id="btn-diffuser" onclick="setDrying('Diffuser (Upside Down)')">Diffuser</div>
+        <div class="toggle-btn" id="btn-airdry" onclick="setDrying('Air Dry')">Air Dry</div>
+      </div>
+      <div class="toggle-group">
+        <div class="toggle-btn active" id="btn-soaking" onclick="setWetness('Soaking Wet')">Soaking Wet</div>
+        <div class="toggle-btn" id="btn-damp" onclick="setWetness('Damp / Towel Dried')">Damp</div>
+      </div>
+
+      <div class="photo-box" onclick="document.getElementById('camera-input').click()">
+        <img id="photo-preview" src="" alt="Outcome Preview">
+        <div id="photo-placeholder" class="photo-placeholder">
+          📸 Tap to snap or upload dry outcome photo
+        </div>
+        <input type="file" id="camera-input" accept="image/*" capture="environment" onchange="handlePhoto(event)">
+      </div>
+
+      <textarea id="log-notes" placeholder="Notes (e.g. root volume, crunch, weather, frizz level)..."></textarea>
+      
+      <button class="btn-primary" onclick="saveLog()">Save Day Entry</button>
+    </div>
+
+    <!-- 3. AI EVALUATION -->
+    <div class="card">
+      <h2>3. 30-Day Evaluation</h2>
+      <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+        Export your structured history to paste directly into our chat for curl clumping, volume, and ingredient analysis.
+      </p>
+      <button class="btn-export" onclick="exportForAI()">📋 Copy Log Summary for Gemini</button>
+    </div>
+
+    <!-- 4. LOG HISTORY -->
+    <div id="history-container"></div>
+  </div>
+
+  <!-- BARCODE SCANNER MODAL -->
+  <div id="scanner-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-title">Scan Product Barcode</h3>
+        <button class="modal-close" onclick="closeScanner()">&times;</button>
+      </div>
+
+      <!-- LIVE CAMERA SCANNER -->
+      <div id="scanner-camera-box">
+        <div id="scanner-viewfinder"></div>
+        <p class="scanner-tip">Point your Pixel camera directly at the barcode</p>
+        <span class="manual-entry-link" onclick="showProductForm('')">Can't scan? Enter manually</span>
+      </div>
+
+      <!-- SCANNED PRODUCT FORM -->
+      <div id="scanner-form-box" style="display: none;">
+        <p id="barcode-display" style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 10px;"></p>
+        <label style="font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 4px;">Product Name</label>
+        <input type="text" id="new-prod-name" placeholder="Looking up product..." style="margin-bottom: 12px;">
+
+        <label style="font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 4px;">Shelf Category</label>
+        <select id="new-prod-cat" style="margin-bottom: 16px;">
+          <option value="stylers">Stylers & Hold</option>
+          <option value="cleansers">Cleansers & Conditioners</option>
+          <option value="primers">Primers & Treatments</option>
+        </select>
+
+        <button class="btn-primary" onclick="confirmAddProduct()">Add to My Shelf</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+
+    // Default Pre-loaded Products
+    const DEFAULT_PRODUCTS = {
+      cleansers: [
+        "Innersense Clarity Hairbath",
+        "Innersense Bright Balance Conditioner",
+        "NYM Bond Building Shampoo",
+        "NYM Bond Building Conditioner"
+      ],
+      primers: [
+        "Marc Anthony Leave-In Spray",
+        "OGX Bond Protein Repair Spray",
+        "Moerie Growth Spray"
+      ],
+      stylers: [
+        "Innersense Air Dry Styling Cream",
+        "NYM Moisturizing Lotion",
+        "NYM Flash Freeze Gel",
+        "NYM Curl Foam",
+        "Herbal Essences Mousse",
+        "Local Defrizz Spray"
+      ]
+    };
+
+    // Custom Products in LocalStorage
+    function getCustomProducts() {
+      try {
+        return JSON.parse(localStorage.getItem("curllog_custom_products") || "[]");
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveCustomProducts(list) {
+      localStorage.setItem("curllog_custom_products", JSON.stringify(list));
+    }
+
+    function renderShelf() {
+      const custom = getCustomProducts();
+      ['cleansers', 'primers', 'stylers'].forEach(cat => {
+        const container = document.getElementById(`pills-${cat}`);
+        container.innerHTML = "";
+
+        // Render Pre-loaded
+        DEFAULT_PRODUCTS[cat].forEach(name => {
+          const pill = document.createElement("div");
+          pill.className = "pill";
+          pill.innerText = name;
+          pill.onclick = () => addToRoutine(name);
+          container.appendChild(pill);
+        });
+
+        // Render User Scanned/Added
+        custom.filter(p => p.category === cat).forEach(p => {
+          const pill = document.createElement("div");
+          pill.className = "pill custom";
+          pill.innerHTML = `<span>${p.name}</span><span class="delete-custom" onclick="event.stopPropagation(); deleteProduct(${p.id})">&times;</span>`;
+          pill.onclick = () => addToRoutine(p.name);
+          container.appendChild(pill);
+        });
+      });
+    }
+
+    function deleteProduct(id) {
+      if (!confirm("Remove this product from your shelf?")) return;
+      const list = getCustomProducts().filter(p => p.id !== id);
+      saveCustomProducts(list);
+      renderShelf();
+    }
+
+    // --- Barcode Scanning Workflow ---
+    let html5Scanner = null;
+
+    function openScanner() {
+      document.getElementById("scanner-modal").style.display = "flex";
+      document.getElementById("scanner-camera-box").style.display = "block";
+      document.getElementById("scanner-form-box").style.display = "none";
+      document.getElementById("modal-title").innerText = "Scan Product Barcode";
+
+      html5Scanner = new Html5Qrcode("scanner-viewfinder", {
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true } // Uses Pixel's hardware detector
+      });
+
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 140 },
+        aspectRatio: 1.333333
+      };
+
+      html5Scanner.start(
+        { facingMode: "environment" },
+        config,
+        onBarcodeDetected,
+        () => {} // Frame scan in progress
+      ).catch(err => {
+        alert("Camera access was not granted or is unavailable: " + err);
+        showProductForm("");
+      });
+    }
+
+    async function onBarcodeDetected(barcodeText) {
+      if (navigator.vibrate) navigator.vibrate(80);
+      stopScannerEngine();
+      showProductForm(barcodeText);
+
+      // Automatic product database lookup via Open Beauty Facts
+      try {
+        const res = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${barcodeText}.json`);
+        const data = await res.json();
+        if (data.status === 1 && data.product) {
+          const brand = data.product.brands ? `${data.product.brands} ` : "";
+          const name = data.product.product_name || "";
+          if (name) {
+            document.getElementById("new-prod-name").value = `${brand}${name}`.trim();
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("OpenBeautyFacts lookup bypass", e);
+      }
+
+      document.getElementById("new-prod-name").value = "";
+      document.getElementById("new-prod-name").placeholder = "Enter product name";
+      document.getElementById("new-prod-name").focus();
+    }
+
+    function showProductForm(barcode) {
+      stopScannerEngine();
+      document.getElementById("scanner-camera-box").style.display = "none";
+      document.getElementById("scanner-form-box").style.display = "block";
+      document.getElementById("modal-title").innerText = "Add New Product";
+      document.getElementById("barcode-display").innerText = barcode ? `Barcode: ${barcode}` : "Manual Entry";
+      if (!barcode) {
+        document.getElementById("new-prod-name").value = "";
+        document.getElementById("new-prod-name").placeholder = "e.g. Curl Definition Jelly";
+      }
+    }
+
+    function confirmAddProduct() {
+      const name = document.getElementById("new-prod-name").value.trim();
+      const cat = document.getElementById("new-prod-cat").value;
+      if (!name || name === "Looking up product...") {
+        alert("Please enter a product name.");
+        return;
+      }
+
+      const list = getCustomProducts();
+      list.push({ id: Date.now(), name: name, category: cat });
+      saveCustomProducts(list);
+      renderShelf();
+      closeScanner();
+    }
+
+    function stopScannerEngine() {
+      if (html5Scanner) {
+        html5Scanner.stop().then(() => {
+          html5Scanner.clear();
+          html5Scanner = null;
+        }).catch(() => { html5Scanner = null; });
+      }
+    }
+
+    function closeScanner() {
+      stopScannerEngine();
+      document.getElementById("scanner-modal").style.display = "none";
+    }
+
+    // --- Routine & Storage Workflow ---
+    let db;
+    const request = indexedDB.open("CurlTrackerDB", 1);
+    request.onupgradeneeded = (e) => {
+      db = e.target.result;
+      db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
+    };
+    request.onsuccess = (e) => {
+      db = e.target.result;
+      renderShelf();
+      renderHistory();
+    };
+
+    let activeRoutine = [];
+    let dryingMethod = "Diffuser (Upside Down)";
+    let wetnessState = "Soaking Wet";
+    let currentPhotoBase64 = null;
+
+    function addToRoutine(productName) {
+      activeRoutine.push(productName);
+      renderRoutine();
+    }
+
+    function removeFromRoutine(index) {
+      activeRoutine.splice(index, 1);
+      renderRoutine();
+    }
+
+    function renderRoutine() {
+      const list = document.getElementById("routine-list");
+      list.innerHTML = "";
+      if (activeRoutine.length === 0) {
+        list.innerHTML = '<li class="empty-msg">Tap products from above to set your sequence</li>';
+        return;
+      }
+      activeRoutine.forEach((prod, i) => {
+        const li = document.createElement("li");
+        li.className = "routine-item";
+        li.innerHTML = `<span><span class="step-num">#${i + 1}</span> ${prod}</span>
+                        <button class="remove-btn" onclick="removeFromRoutine(${i})">&times;</button>`;
+        list.appendChild(li);
+      });
+    }
+
+    function setDrying(method) {
+      dryingMethod = method;
+      document.getElementById("btn-diffuser").classList.toggle("active", method.includes("Diffuser"));
+      document.getElementById("btn-airdry").classList.toggle("active", method.includes("Air"));
+    }
+
+    function setWetness(state) {
+      wetnessState = state;
+      document.getElementById("btn-soaking").classList.toggle("active", state.includes("Soaking"));
+      document.getElementById("btn-damp").classList.toggle("active", state.includes("Damp"));
+    }
+
+    function handlePhoto(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          const maxDim = 900;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height && width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          ctx.drawImage(img, 0, 0, width, height);
+          currentPhotoBase64 = canvas.toDataURL("image/jpeg", 0.75);
+
+          document.getElementById("photo-preview").src = currentPhotoBase64;
+          document.getElementById("photo-preview").style.display = "block";
+          document.getElementById("photo-placeholder").style.display = "none";
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function saveLog() {
+      if (activeRoutine.length === 0) {
+        alert("Please select at least one product used today.");
+        return;
+      }
+
+      const tx = db.transaction("logs", "readwrite");
+      const store = tx.objectStore("logs");
+      const entry = {
+        date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        steps: [...activeRoutine],
+        drying: dryingMethod,
+        wetness: wetnessState,
+        notes: document.getElementById("log-notes").value,
+        photo: currentPhotoBase64
+      };
+
+      store.add(entry);
+      tx.oncomplete = () => {
+        activeRoutine = [];
+        currentPhotoBase64 = null;
+        document.getElementById("photo-preview").style.display = "none";
+        document.getElementById("photo-placeholder").style.display = "block";
+        document.getElementById("log-notes").value = "";
+        renderRoutine();
+        renderHistory();
+      };
+    }
+
+    function renderHistory() {
+      const tx = db.transaction("logs", "readonly");
+      const store = tx.objectStore("logs");
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const logs = request.result;
+        document.getElementById("day-counter").innerText = `Day ${logs.length} / 30`;
+        const container = document.getElementById("history-container");
+        container.innerHTML = `<h2 style="font-size:0.95rem; text-transform:uppercase; color:var(--accent); margin:18px 0 10px;">Logged History (${logs.length})</h2>`;
+
+        if (logs.length === 0) {
+          container.innerHTML += `<div class="empty-msg">No logs recorded yet.</div>`;
+          return;
+        }
+
+        logs.reverse().forEach((log) => {
+          const div = document.createElement("div");
+          div.className = "card log-card";
+          div.innerHTML = `
+            <div class="log-header">
+              <span>📅 ${log.date}</span>
+              <span>${log.drying}</span>
+            </div>
+            <div style="font-size:0.85rem; margin-bottom:6px;"><strong>Steps:</strong> ${log.steps.join(" ➔ ")}</div>
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">Application: ${log.wetness}</div>
+            ${log.notes ? `<div style="font-size:0.82rem; margin-top:4px; font-style:italic;">"${log.notes}"</div>` : ""}
+            ${log.photo ? `<img src="${log.photo}" class="log-img" alt="Result photo">` : ""}
+          `;
+          container.appendChild(div);
+        });
+      };
+    }
+
+    function exportForAI() {
+      const tx = db.transaction("logs", "readonly");
+      const store = tx.objectStore("logs");
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const logs = request.result;
+        if (logs.length === 0) {
+          alert("No logs to export yet!");
+          return;
+        }
+
+        let output = `=== 30-DAY HAIR EXPERIMENT LOG FOR AI ANALYSIS ===\n\n`;
+        logs.forEach((log, i) => {
+          output += `Day ${i + 1} (${log.date}):\n`;
+          output += `- Sequence: ${log.steps.join(" -> ")}\n`;
+          output += `- Method: ${log.drying} | ${log.wetness}\n`;
+          if (log.notes) output += `- User Notes: ${log.notes}\n`;
+          output += `- Photo Attached: ${log.photo ? "Yes" : "No"}\n\n`;
+        });
+
+        navigator.clipboard.writeText(output).then(() => {
+          alert("Log summary copied to clipboard! You can paste it into our chat for analysis.");
+        });
+      };
+    }
+  </script>
+</body>
+</html>
